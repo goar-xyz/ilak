@@ -12,7 +12,7 @@
 
 [Download](https://github.com/ScriptKiddieZed/NullShell/releases) · [Screenshots](#screenshots) · [Features](#features) · [Build](#building-from-source) · [Contribute](#contributing)
 
-![banner](https://github.com/ScriptKiddieZed/NullShell/banner.png)
+![banner](https://github.com/ScriptKiddieZed/NullShell/blob/574250755ab2fa5ac03979931fb5f19f3efad58f/banner.png)
 
 </div>
 
