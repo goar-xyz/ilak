@@ -33,9 +33,11 @@ public final class Prefs {
     public static final String VNC_EXTRA = "vnc_extra";
     public static final String VNC_THEME = "vnc_theme";
     public static final String VNC_UISIZE = "vnc_uisize";
-    public static final String VNC_WALL = "vnc_wall";
     public static final String VNC_WALLPATH = "vnc_wallpath";
-    public static final String VNC_KEEPCFG = "vnc_keepcfg";
+    public static final String VNC_WM = "vnc_wm";
+    public static final String VNC_OBTHEME = "vnc_obtheme";
+    public static final String VNC_OBWALL = "vnc_obwall";
+    public static final String WM_ICEWM = "icewm", WM_OPENBOX = "openbox";
     /** Colour depths the VNC server can be started with; VNC_DEPTH is an index into this. */
     public static final int[] VNC_DEPTHS = {16, 24};
     public static final String EXTRA_KEYS = "extra_keys";
@@ -142,16 +144,18 @@ public final class Prefs {
     public static boolean vncShared(Context c) { return sp(c).getBoolean(VNC_SHARED, true); }
     public static boolean vncTerminal(Context c) { return sp(c).getBoolean(VNC_TERMINAL, true); }
     public static boolean vncClipboard(Context c) { return sp(c).getBoolean(VNC_CLIPBOARD, true); }
-    /** IceWM theme folder name (a downloaded or bundled theme); empty for IceWM's own default. Nord by default. */
-    public static String vncTheme(Context c) { return sp(c).getString(VNC_THEME, "Nord"); }
-    /** 0 normal, 1 large, 2 extra large: fonts, title bars and taskbar. */
-    /** Theme wallpaper: 0 stretch to the screen, 1 centre, 2 tile, 3 none (solid colour). */
-    public static int vncWallpaper(Context c) { return clamp(sp(c).getInt(VNC_WALL, 0), 0, 3); }
+    /** The desktop the VNC server starts: {@link #WM_ICEWM} (default) or {@link #WM_OPENBOX}. */
+    public static String vncWm(Context c) { return WM_OPENBOX.equals(sp(c).getString(VNC_WM, WM_ICEWM)) ? WM_OPENBOX : WM_ICEWM; }
+    /** Openbox theme for a NEW default config (set when a rice is applied); empty for Openbox's own default. */
+    public static String vncObTheme(Context c) { return sp(c).getString(VNC_OBTHEME, ""); }
+    /** How the user's own wallpaper fits: 0 fill (crop), 1 stretch, 2 centre, 3 tile. (Older versions also stored 4 = none.) */
+    public static int vncWallpaperFit(Context c) { int v = sp(c).getInt(VNC_OBWALL, 0); return v < 0 || v > 3 ? 0 : v; }
+    /** IceWM theme for a NEW default config (set when a rice is applied); empty for IceWM's own default. */
+    public static String vncTheme(Context c) { return sp(c).getString(VNC_THEME, ""); }
     /** Guest path of the user's own wallpaper image; empty for the theme's. */
     public static String vncWallpaperPath(Context c) { return sp(c).getString(VNC_WALLPATH, ""); }
+    /** 0 normal, 1 large, 2 extra large: fonts, title bars and panel of a NEW default desktop config (no setting for it). */
     public static int vncUiSize(Context c) { return clamp(sp(c).getInt(VNC_UISIZE, 1), 0, 2); }
-    /** When on, the app writes ~/.icewm only if it does not exist yet. */
-    public static boolean vncKeepConfig(Context c) { return sp(c).getBoolean(VNC_KEEPCFG, false); }
     public static String vncExtra(Context c) { return sp(c).getString(VNC_EXTRA, "").trim(); }
 
     /** The VNC password. VNC authentication only uses the first 8 characters, so it is exactly 8 when generated.

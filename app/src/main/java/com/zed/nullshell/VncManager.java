@@ -13,7 +13,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * A VNC server inside Kali that shows an IceWM desktop, meant to be used from a separate VNC viewer app. It runs
+ * A VNC server inside Kali that shows an IceWM or Openbox desktop, meant to be used from a separate VNC viewer app. It runs
  * Xtigervnc directly (no vncserver wrapper script, no noVNC/websockify) and starts IceWM in it.
  *
  * <p>The server lives as long as one PRoot process. Stopping kills that process and then sweeps /proc for the
@@ -26,20 +26,25 @@ final class VncManager {
 
     /** Everything the desktop needs. tigervnc-tools is where vncpasswd lives; xfonts-base provides the "fixed" font
      *  without which Xtigervnc refuses to start at all; x11-xkb-utils provides xkbcomp, which it also needs. */
-    static final String PACKAGES = "icewm xterm tigervnc-standalone-server tigervnc-common tigervnc-tools"
+    static final String BASE_PACKAGES = "xterm tigervnc-standalone-server tigervnc-common tigervnc-tools"
             + " xfonts-base fonts-dejavu-core x11-xserver-utils x11-xkb-utils xkb-data dbus-x11"
             // GTK file managers (Thunar, PCManFM) need the mime database and an icon theme with SVG support
             + " shared-mime-info adwaita-icon-theme librsvg2-common";
 
     /** Only what this feature added at the top level; shared libraries/fonts go via autoremove, and xterm, xkb-data,
      *  dbus-x11 are left alone because other things commonly depend on them. */
-    private static final String REMOVE_PACKAGES = "icewm tigervnc-standalone-server tigervnc-common tigervnc-tools";
+    private static final String REMOVE_PACKAGES = "icewm " + OpenboxConfig.PACKAGES + " tigervnc-standalone-server tigervnc-common tigervnc-tools";
+
+    /** The window manager chosen in Settings, and the packages that provide it. */
+    static boolean openbox(Context ctx) { return Prefs.WM_OPENBOX.equals(Prefs.vncWm(ctx)); }
+    static String wmName(Context ctx) { return openbox(ctx) ? "Openbox" : "IceWM"; }
+    private static String wmPackages(Context ctx) { return openbox(ctx) ? OpenboxConfig.PACKAGES : "icewm feh"; }
 
     /** Printed by the start script once the server accepts connections. */
     private static final String READY_MARKER = "VNC server is up";
 
-    static String installCommand() {
-        return "apt update && apt install -y " + PACKAGES;
+    static String installCommand(Context ctx) {
+        return "apt update && apt install -y " + wmPackages(ctx) + " " + BASE_PACKAGES;
     }
 
     static String uninstallCommand() {
@@ -55,7 +60,11 @@ final class VncManager {
         List<String> m = new ArrayList<>();
         if (GuestPaths.which(rootfs, "Xtigervnc") == null && GuestPaths.which(rootfs, "Xvnc") == null) m.add("tigervnc-standalone-server");
         if (GuestPaths.which(rootfs, "vncpasswd") == null) m.add("tigervnc-tools");
-        if (GuestPaths.which(rootfs, "icewm-session") == null) m.add("icewm");
+        if (openbox(ctx)) {
+            if (GuestPaths.which(rootfs, "openbox-session") == null) m.add("openbox");
+            if (GuestPaths.which(rootfs, "tint2") == null) m.add("tint2");
+            if (GuestPaths.which(rootfs, "xdotool") == null) m.add("xdotool");
+        } else if (GuestPaths.which(rootfs, "icewm-session") == null) m.add("icewm");
         if (GuestPaths.which(rootfs, "xkbcomp") == null) m.add("x11-xkb-utils");
         if (!new File(rootfs, "var/lib/dpkg/info/xfonts-base.list").isFile()) m.add("xfonts-base");
         return String.join(", ", m);
@@ -81,6 +90,7 @@ final class VncManager {
         File info = new File(rootfs, "var/lib/dpkg/info");
         for (String p : new String[]{"shared-mime-info", "adwaita-icon-theme", "librsvg2-common"})
             if (!dpkgHas(info, p)) m.add(p);
+        if (!dpkgHas(info, "feh")) m.add("feh");                          // for the wallpaper
         return String.join(", ", m);
     }
 
@@ -88,7 +98,8 @@ final class VncManager {
     static boolean anyInstalled(Context ctx) {
         File rootfs = RootfsManager.dir(ctx);
         return GuestPaths.which(rootfs, "Xtigervnc") != null || GuestPaths.which(rootfs, "Xvnc") != null
-                || GuestPaths.which(rootfs, "icewm-session") != null || GuestPaths.which(rootfs, "vncpasswd") != null;
+                || GuestPaths.which(rootfs, "icewm-session") != null || GuestPaths.which(rootfs, "openbox-session") != null
+                || GuestPaths.which(rootfs, "vncpasswd") != null;
     }
 
     // ------------------------------------------------------------------ connection details
@@ -200,7 +211,7 @@ final class VncManager {
 
     /** Guest program names that make up the desktop. */
     private static final java.util.Set<String> DESKTOP_PROCS = new java.util.HashSet<>(Arrays.asList(
-            "Xtigervnc", "Xvnc", "icewm-session", "icewm", "icewmbg", "icewmtray", "vncconfig"));
+            "Xtigervnc", "Xvnc", "icewm-session", "icewm", "icewmbg", "icewmtray", "openbox-session", "openbox", "tint2", "vncconfig"));
 
     /** Set in the start script's environment: every process the desktop starts inherits it, however it is renamed. */
     private static final String ENV_MARK = "NS_VNC=1";
@@ -281,9 +292,10 @@ final class VncManager {
         s.append("XV=$(command -v Xtigervnc || command -v Xvnc)\n");
         s.append("[ -n \"$XV\" ] || { echo 'ERROR: the VNC server (Xtigervnc) is not installed - use Install.'; exit 127; }\n");
         s.append("command -v vncpasswd >/dev/null || { echo 'ERROR: vncpasswd is missing (package tigervnc-tools) - use Install.'; exit 127; }\n");
-        s.append("command -v icewm-session >/dev/null || { echo 'ERROR: IceWM is not installed - use Install.'; exit 127; }\n");
+        if (openbox(ctx)) s.append("command -v openbox-session >/dev/null || { echo 'ERROR: Openbox is not installed - use Install.'; exit 127; }\n");
+        else s.append("command -v icewm-session >/dev/null || { echo 'ERROR: IceWM is not installed - use Install.'; exit 127; }\n");
         // leftovers from a run that was cut short would otherwise hold the port / display lock
-        s.append("pkill -x Xtigervnc 2>/dev/null; pkill -x Xvnc 2>/dev/null; pkill -x icewm-session 2>/dev/null; pkill -x icewm 2>/dev/null\n");
+        s.append("pkill -x Xtigervnc 2>/dev/null; pkill -x Xvnc 2>/dev/null; pkill -x icewm-session 2>/dev/null; pkill -x icewm 2>/dev/null; pkill -x openbox 2>/dev/null; pkill -x tint2 2>/dev/null\n");
         s.append("rm -f /tmp/.X").append(d).append("-lock ").append(sock).append("\n");
         s.append("printf '%s\\n' ").append(ProotLauncher.quote(Prefs.vncPassword(ctx)))
                 .append(" | vncpasswd -f > \"$HOME/.vnc/passwd\" || { echo 'ERROR: could not create the password file.'; exit 1; }\n");
@@ -308,10 +320,12 @@ final class VncManager {
         s.append("export NO_AT_BRIDGE=1 GIO_USE_VOLUME_MONITOR=unix\n");
         s.append("export XDG_RUNTIME_DIR=/tmp/runtime-root\n");
         s.append("mkdir -p \"$XDG_RUNTIME_DIR\"; chmod 700 \"$XDG_RUNTIME_DIR\"\n");
-        s.append(IceWmConfig.script(ctx));
+        s.append(openbox(ctx) ? OpenboxConfig.script(ctx) : IceWmConfig.script(ctx));
         if (Prefs.vncClipboard(ctx)) s.append("command -v vncconfig >/dev/null 2>&1 && vncconfig -nowin >/dev/null 2>&1 &\n");
         if (Prefs.vncTerminal(ctx)) s.append("command -v xterm >/dev/null 2>&1 && xterm -geometry 100x30+30+30 -fa Monospace -fs 11 >/dev/null 2>&1 &\n");
-        s.append("if command -v dbus-launch >/dev/null 2>&1; then dbus-launch --exit-with-session icewm-session & else icewm-session & fi\n");
+        String session = openbox(ctx) ? "openbox-session" : "icewm-session";
+        s.append("if command -v dbus-launch >/dev/null 2>&1; then dbus-launch --exit-with-session ").append(session)
+                .append(" & else ").append(session).append(" & fi\n");
         s.append("wait $XPID\n");
         s.append("exit $?\n");
         return s.toString();
@@ -319,7 +333,6 @@ final class VncManager {
 
     private static void runBlocking(Context ctx) {
         File rootfs = RootfsManager.dir(ctx);
-        IceWmConfig.ensureBundled(ctx);
         try { KaliSession.prepareGuest(ctx, rootfs); } catch (Exception e) { lastReason = RootfsManager.message(e); return; }
 
         List<String> cmd = ProotLauncher.command(ctx, rootfs, new ArrayList<>(), "/root");

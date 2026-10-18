@@ -414,7 +414,6 @@ public class MainActivity extends Activity {
         m.add(0, 6, 3, "Editor").setEnabled(installed);
         m.add(0, 7, 4, "Browser");
         m.add(0, 9, 5, "Files");
-        m.add(0, 11, 6, "AI chat");
         m.add(0, 10, 7, "Network");
         m.add(0, 12, 8, "VNC server");
         m.add(0, 8, 9, "Memory");
@@ -432,7 +431,6 @@ public class MainActivity extends Activity {
                 case 9: FileManagerActivity.open(this, null); return true;
                 case 10: startActivity(new Intent(this, NetworkActivity.class)); return true;
                 case 12: startActivity(new Intent(this, VncActivity.class)); return true;
-                case 11: startActivity(new Intent(this, ChatActivity.class)); return true;
                 case 8: MemoryReport.show(this, "Trim scrollback", () -> SessionManager.get().trimScrollback(500)); return true;
                 default: return false;
             }

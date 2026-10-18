@@ -10,6 +10,5 @@ Key Features:
 
 * Graphical Desktop: Start an integrated IceWM VNC server to interact with GUI applications and file managers natively.
 
-* AI Workspace Assistant: An embedded engineering companion interface powered by the Gemini API to help stream code blocks and manage development scripts.
 
 Requirements: An ARM64 device running Android 8.0 (API 26) or newer. Use NullShell responsibly for authorized testing and educational purposes.

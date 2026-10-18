@@ -274,10 +274,6 @@
         <activity android:name=".BrowserSettingsActivity" android:exported="false" android:label="Browser settings"
             android:windowSoftInputMode="adjustResize"/>
         <activity android:name=".ThemeActivity" android:exported="false" android:label="Appearance" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|fontScale"/>
-        <activity android:name=".ChatActivity" android:exported="false" android:label="AI chat" android:windowSoftInputMode="adjustResize|stateHidden"
-            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|fontScale"/>
-        <activity android:name=".AssistantsActivity" android:exported="false" android:label="Assistants" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|fontScale"/>
-        <activity android:name=".AiSettingsActivity" android:exported="false" android:label="AI settings" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|fontScale"/>
         <activity android:name=".NetworkActivity" android:exported="false" android:label="Network" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|fontScale"/>
         <activity android:name=".VncActivity" android:exported="false" android:label="VNC server" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|fontScale"/>
         <activity android:name=".BrowserHistoryActivity" android:exported="false" android:label="History"

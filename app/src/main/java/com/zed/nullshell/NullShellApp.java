@@ -20,6 +20,7 @@ public class NullShellApp extends Application {
     @Override public void onCreate() {
         super.onCreate();
         Theme.load(this);
+        removeOldData();
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
             @Override public void onActivityCreated(Activity a, Bundle b) {
                 Theme.load(a);                                       // follows the system day/night setting when "automatic" is on
@@ -37,6 +38,36 @@ public class NullShellApp extends Application {
             @Override public void onActivitySaveInstanceState(Activity a, Bundle b) { }
             @Override public void onActivityDestroyed(Activity a) { built.remove(a); }
         });
+    }
+
+    /** Deletes data left by a removed feature, once, for people upgrading from an older version. */
+    private void removeOldData() {
+        try {
+            android.content.SharedPreferences done = getSharedPreferences("ns_cleanup", MODE_PRIVATE);
+            if (done.getBoolean("v1", false)) return;
+            try {
+                android.content.SharedPreferences p = Prefs.sp(this);
+                android.content.SharedPreferences.Editor e = p.edit();
+                for (String k : new String[]{"ai_key_enc", "ai_key_plain", "ai_last_conv", "ai_models_cache", "ai_models_time", "ai_model", "ai_privacy_ok"}) e.remove(k);
+                e.apply();
+            } catch (Throwable ignored) { }
+            deleteDatabase("chat.db");
+            deleteTree(new java.io.File(getFilesDir(), "ai_files"));
+            deleteTree(new java.io.File(getCacheDir(), "ai_pending"));
+            try {
+                java.security.KeyStore ks = java.security.KeyStore.getInstance("AndroidKeyStore");
+                ks.load(null);
+                ks.deleteEntry("nullshell_ai_key");
+            } catch (Throwable ignored) { }
+            done.edit().putBoolean("v1", true).apply();
+        } catch (Throwable ignored) { }
+    }
+
+    private static void deleteTree(java.io.File f) {
+        if (f == null || !f.exists()) return;
+        java.io.File[] kids = f.isDirectory() && !java.nio.file.Files.isSymbolicLink(f.toPath()) ? f.listFiles() : null;
+        if (kids != null) for (java.io.File k : kids) deleteTree(k);
+        f.delete();
     }
 
     @SuppressWarnings("deprecation")

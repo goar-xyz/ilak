@@ -40,10 +40,12 @@ public class SettingsActivity extends Activity {
             {"editor", "Editor"},
             {"browser", "Browser"},
             {"vnc", "VNC server"},
+            {"rices", "Rices"},
             {"commands", "Commands"},
             {"about", "About & reset"},
     };
-    private static final int REQ_IMPORT = 1, REQ_EXPORT = 2, REQ_CMD_IMPORT = 3, REQ_CMD_EXPORT = 4;
+    private static final int REQ_IMPORT = 1, REQ_EXPORT = 2, REQ_CMD_IMPORT = 3, REQ_CMD_EXPORT = 4,
+            REQ_RICE_EXPORT = 5, REQ_RICE_IMPORT = 6;
 
     private interface Op { void run(RootfsManager.Progress p) throws Exception; }
 
@@ -117,6 +119,7 @@ public class SettingsActivity extends Activity {
                 case "commands": buildCommandsSection(); break;
                 case "editor": buildEditorSection(); break;
                 case "vnc": buildVncSection(); break;
+                case "rices": buildRicesSection(); break;
                 default: buildOtherSection(); break;
             }
         }
@@ -214,6 +217,9 @@ public class SettingsActivity extends Activity {
 
         setSummary("vnc", Prefs.vncWidth(this) + "×" + Prefs.vncHeight(this) + "  ·  :" + Prefs.vncDisplay(this)
                 + "  ·  " + (Prefs.vncLocalOnly(this) ? "this phone only" : "network access"));
+
+        int rices = RiceManager.list(this).size();
+        setSummary("rices", rices == 0 ? "Save, share and restore your desktop look" : rices + " saved");
 
         SnippetStore.get().init(this);
         int n = SnippetStore.get().all().size();
@@ -555,9 +561,26 @@ public class SettingsActivity extends Activity {
 
     private void buildVncSection() {
         section("VNC server");
-        note("A graphical IceWM desktop inside Kali, served over VNC for a separate VNC viewer app. It is software "
+        note("A graphical desktop inside Kali, served over VNC for a separate VNC viewer app. It is software "
                 + "rendered, so a smaller size and 16-bit colour run faster. Changes apply the next time the server "
                 + "starts (use Restart on the VNC server screen).");
+
+        // ---- desktop
+        rowLabel("Desktop");
+        final String[] wmNames = {"IceWM", "Openbox"};
+        final String[] wmIds = {Prefs.WM_ICEWM, Prefs.WM_OPENBOX};
+        final TextView wmBtn = Ui.button(this, VncManager.wmName(this), Ui.SECONDARY);
+        wmBtn.setOnClickListener(v -> new Dlg(this).setTitle("Desktop")
+                .setSingleChoiceItems(wmNames, Prefs.WM_OPENBOX.equals(Prefs.vncWm(this)) ? 1 : 0, (d, which) -> {
+                    sp.edit().putString(Prefs.VNC_WM, wmIds[which]).apply();
+                    wmBtn.setText(wmNames[which]);
+                    d.dismiss();
+                    toast(VncManager.isInstalled(this) ? "Applies the next time the server starts."
+                            : "Open the VNC server screen and tap Install to add " + wmNames[which] + ".");
+                }).show());
+        card.addView(wmBtn);
+        note("IceWM is the default. Openbox is just as light, with a tint2 panel and a Menu button. "
+                + "Switching only needs Install the first time. Save, share and restore whole setups under Rices.");
 
         // ---- resolution
         vncWLabel = rowLabel(vncWText(Prefs.vncWidth(this)));
@@ -645,50 +668,20 @@ public class SettingsActivity extends Activity {
 
         // ---- desktop look
         section("Desktop look");
-        IceWmConfig.ensureBundled(this);
-        note("Real IceWM themes: Nord, Nitrogen and Ice7 come with the app (install Kali first), and you can download about "
-                + "100 more from the official icewm-extra project. The choice is written into the Kali home folder each time "
-                + "the server starts.");
-        rowLabel("Theme");
-        final TextView themeBtn = Ui.button(this, IceWmConfig.themeLabel(this), Ui.SECONDARY);
-        themeBtn.setOnClickListener(v -> showIceWmThemePicker(themeBtn));
-        card.addView(themeBtn);
-        final TextView themeDl = Ui.button(this, IceWmConfig.downloadedCount(this) > 0
-                ? "Update themes (" + IceWmConfig.downloadedCount(this) + " installed)" : "Download themes", Ui.SECONDARY);
-        themeDl.setOnClickListener(v -> new Dlg(this).setTitle("Download IceWM themes?")
-                .setMessage("Downloads the icewm-extra theme collection from GitHub (GPL-3.0) into the Kali home folder. "
-                        + "It needs an internet connection and some storage.")
-                .setPositiveButton("Download", (d, w) -> downloadIceWmThemes(themeBtn, themeDl))
-                .setNegativeButton("Cancel", null).show());
-        card.addView(themeDl, topMargin(8));
-        TextView themeRm = Ui.button(this, "Remove downloaded themes", Ui.SECONDARY);
-        themeRm.setOnClickListener(v -> new Dlg(this).setTitle("Remove downloaded themes?")
-                .setPositiveButton("Remove", (d, w) -> {
-                    IceWmConfig.removeDownloadedThemes(this);
-                    themeBtn.setText(IceWmConfig.themeLabel(this));
-                    themeDl.setText("Download themes");
-                })
-                .setNegativeButton("Cancel", null).show());
-        card.addView(themeRm, topMargin(8));
-        rowLabel("Interface size");
-        final TextView sizeBtn = Ui.button(this, IceWmConfig.SIZE_NAMES[Prefs.vncUiSize(this)], Ui.SECONDARY);
-        sizeBtn.setOnClickListener(v -> new Dlg(this).setTitle("Interface size")
-                .setSingleChoiceItems(IceWmConfig.SIZE_NAMES, Prefs.vncUiSize(this), (d, which) -> {
-                    sp.edit().putInt(Prefs.VNC_UISIZE, which).apply();
-                    sizeBtn.setText(IceWmConfig.SIZE_NAMES[which]);
+        note("NullShell never changes your desktop config in Kali. It only writes a starting config when a file is missing. "
+                + "Themes, icons, panels and fonts are yours to set up inside Kali (lxappearance, obconf, rofi ...); keep a "
+                + "finished look under Rices.");
+        rowLabel("Wallpaper fit");
+        final TextView obWallBtn = Ui.button(this, DesktopWallpaper.NAMES[Prefs.vncWallpaperFit(this)], Ui.SECONDARY);
+        obWallBtn.setOnClickListener(v -> new Dlg(this).setTitle("Wallpaper fit")
+                .setSingleChoiceItems(DesktopWallpaper.NAMES, Prefs.vncWallpaperFit(this), (d, which) -> {
+                    sp.edit().putInt(Prefs.VNC_OBWALL, which).apply();
+                    obWallBtn.setText(DesktopWallpaper.NAMES[which]);
                     d.dismiss();
                 }).show());
-        card.addView(sizeBtn);
-        note("Sets the font, title bar and taskbar size. Use Large or Extra large on a phone.");
-        rowLabel("Wallpaper");
-        final TextView wallBtn = Ui.button(this, IceWmConfig.WALLPAPER_NAMES[Prefs.vncWallpaper(this)], Ui.SECONDARY);
-        wallBtn.setOnClickListener(v -> new Dlg(this).setTitle("Theme wallpaper")
-                .setSingleChoiceItems(IceWmConfig.WALLPAPER_NAMES, Prefs.vncWallpaper(this), (d, which) -> {
-                    sp.edit().putInt(Prefs.VNC_WALL, which).apply();
-                    wallBtn.setText(IceWmConfig.WALLPAPER_NAMES[which]);
-                    d.dismiss();
-                }).show());
-        card.addView(wallBtn, topMargin(8));
+        card.addView(obWallBtn);
+
+        rowLabel("Your own wallpaper");
         final TextView ownWall = Ui.button(this, wallpaperLabel(), Ui.SECONDARY);
         ownWall.setOnClickListener(v -> FilePick.request(this, false, "/root", path -> {
             String low = path.toLowerCase(Locale.ROOT);
@@ -697,30 +690,20 @@ public class SettingsActivity extends Activity {
                     || low.endsWith(".bmp") || low.endsWith(".gif"))) { toast("Pick a PNG or JPEG image."); return; }
             sp.edit().putString(Prefs.VNC_WALLPATH, path).apply();
             ownWall.setText(wallpaperLabel());
-            toast("Wallpaper set. It shows the next time the desktop starts.");
+            toast(fehMissing() ? "Wallpaper set. It also needs feh: tap Install extras on the VNC server screen."
+                    : "Wallpaper set. It shows the next time the desktop starts.");
         }));
         card.addView(ownWall, topMargin(8));
-        TextView ownWallOff = Ui.button(this, "Use the theme's wallpaper", Ui.SECONDARY);
+        TextView ownWallOff = Ui.button(this, "Remove my wallpaper", Ui.SECONDARY);
         ownWallOff.setOnClickListener(v -> {
             sp.edit().remove(Prefs.VNC_WALLPATH).apply();
             ownWall.setText(wallpaperLabel());
         });
         card.addView(ownWallOff, topMargin(8));
-        note("Your own image: pick a PNG or JPEG from Kali's files (copy a photo in with the file manager first). "
-                + "The setting above decides how it fits. Applies at the next desktop start.");
-        note("Many themes include a wallpaper made for one screen size. Stretch fills your desktop; the others keep its "
-                + "shape (centre, tile) or hide it."); 
-        toggle("Keep my own desktop config", Prefs.VNC_KEEPCFG, false);
-        note("On: once ~/.icewm/preferences exists, the app never overwrites your config. It still writes it the first time.");
-        TextView resetCfg = Ui.button(this, "Reset desktop config", Ui.SECONDARY);
-        resetCfg.setOnClickListener(v -> new Dlg(this).setTitle("Reset desktop config?")
-                .setMessage("Deletes the preferences, theme choice and menu files in Kali. They are written again from the settings the next time the server starts. Downloaded themes are kept.")
-                .setPositiveButton("Reset", (d, w) -> {
-                    IceWmConfig.reset(this);
-                    Toast.makeText(this, "Desktop config reset", Toast.LENGTH_SHORT).show();
-                })
-                .setNegativeButton("Cancel", null).show());
-        card.addView(resetCfg, topMargin(8));
+        note("Pick a PNG or JPEG from Kali's files (copy a photo in with the file manager first). It is set with feh each "
+                + "time the desktop starts, whatever your config says, so feh must be installed (Install extras on the VNC "
+                + "server screen). If it does not show, the server log says why. To use your config's wallpaper instead, "
+                + "tap Remove my wallpaper.");
 
         // ---- behaviour
         toggle("Only this phone can connect", Prefs.VNC_LOCAL, true);
@@ -789,80 +772,6 @@ public class SettingsActivity extends Activity {
                 "Added to the Xtigervnc command line. Leave empty unless you know you need it.");
     }
 
-    private void showIceWmThemePicker(final TextView button) {
-        IceWmConfig.ensureBundled(this);
-        java.util.List<String> installed = IceWmConfig.installedThemes(this);
-        final java.util.List<String> ids = new java.util.ArrayList<>();
-        final java.util.List<String> names = new java.util.ArrayList<>();
-        ids.add(""); names.add("IceWM default");
-        for (String r : IceWmConfig.RECOMMENDED) if (installed.contains(r)) { ids.add(r); names.add("\u2605 " + r); }
-        for (String t : installed) if (!IceWmConfig.RECOMMENDED.contains(t)) { ids.add(t); names.add(t); }
-        if (ids.size() == 1) {
-            Toast.makeText(this, "No themes found. Install Kali first, or use Download themes.", Toast.LENGTH_LONG).show();
-            return;
-        }
-        String cur = Prefs.vncTheme(this);
-        new Dlg(this).setTitle("Desktop theme")
-                .setSingleChoiceItems(names.toArray(new String[0]), Math.max(0, ids.indexOf(cur)), (d, which) -> {
-                    sp.edit().putString(Prefs.VNC_THEME, ids.get(which)).apply();
-                    button.setText(ids.get(which).isEmpty() ? "IceWM default" : ids.get(which));
-                    d.dismiss();
-                }).show();
-    }
-
-    private void downloadIceWmThemes(final TextView themeBtn, final TextView themeDl) {
-        final boolean[] cancelled = {false};
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(Ui.dp(this, 22), Ui.dp(this, 10), Ui.dp(this, 22), Ui.dp(this, 4));
-        final TextView status = new TextView(this);
-        status.setTextColor(Ui.TEXT);
-        status.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-        status.setText("Connecting\u2026");
-        box.addView(status);
-        final ProgressBar bar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
-        bar.setIndeterminate(true);
-        bar.setMax(1000);
-        LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        bp.topMargin = Ui.dp(this, 12);
-        box.addView(bar, bp);
-        final AlertDialog dlg = new Dlg(this).setTitle("Downloading themes").setView(box).setCancelable(false)
-                .setNegativeButton("Cancel", (d, w) -> cancelled[0] = true).show();
-
-        final android.content.Context app = getApplicationContext();
-        new Thread(() -> {
-            try {
-                final int n = IceWmConfig.downloadThemes(app, new TerminalFonts.Progress() {
-                    @Override public void onProgress(long done, long total) {
-                        main.post(() -> {
-                            if (total > 0) {
-                                bar.setIndeterminate(false);
-                                bar.setProgress((int) Math.min(1000, done * 1000 / total));
-                                status.setText(RootfsManager.formatBytes(done) + " of " + RootfsManager.formatBytes(total));
-                            } else {
-                                status.setText(RootfsManager.formatBytes(done) + " downloaded");
-                            }
-                        });
-                    }
-                    @Override public boolean cancelled() { return cancelled[0]; }
-                });
-                main.post(() -> {
-                    if (isFinishing() || isDestroyed()) return;
-                    dlg.dismiss();
-                    themeBtn.setText(IceWmConfig.themeLabel(this));
-                    themeDl.setText("Update themes (" + IceWmConfig.downloadedCount(this) + " installed)");
-                    Toast.makeText(this, n + " themes installed. Pick one under Theme.", Toast.LENGTH_LONG).show();
-                });
-            } catch (java.io.IOException e) {
-                main.post(() -> {
-                    if (isFinishing() || isDestroyed()) return;
-                    dlg.dismiss();
-                    if (!cancelled[0]) Toast.makeText(this, "Theme download failed: " + e.getMessage(), Toast.LENGTH_LONG).show();
-                });
-            }
-        }, "icewm-themes-download").start();
-    }
-
     private void showVncPresets() {
         android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
         final int longEdge = Math.max(dm.widthPixels, dm.heightPixels);
@@ -886,6 +795,89 @@ public class SettingsActivity extends Activity {
         vncHLabel.setText(vncHText(h));
         vncWBar.setProgress((w - 640) / VNC_STEP);
         vncHBar.setProgress((h - 480) / VNC_STEP);
+    }
+
+    private RiceUi riceUi;
+    private LinearLayout riceList;
+
+    private void buildRicesSection() {
+        riceUi = new RiceUi(this, REQ_RICE_EXPORT, REQ_RICE_IMPORT, this::refreshRices);
+        section("Rices");
+        note("A rice is your whole desktop look in one file: window manager and panel settings (Openbox, tint2, IceWM, rofi, "
+                + "picom, polybar ...), GTK and Qt settings as written by lxappearance, themes, icons and cursors, fonts and "
+                + "the wallpapers your configs use. Save the current look under a name, export it to share, and import or "
+                + "apply any rice later. Saved rices stay on the phone even if Kali is deleted.");
+        TextView save = Ui.button(this, "Save current setup\u2026", Ui.PRIMARY);
+        save.setOnClickListener(v -> riceUi.save());
+        card.addView(save, topMargin(8));
+        TextView imp = Ui.button(this, "Import a rice file\u2026", Ui.SECONDARY);
+        imp.setOnClickListener(v -> riceUi.importStart());
+        card.addView(imp, topMargin(8));
+        TextView tools = Ui.button(this, "Install ricing tools\u2026", Ui.SECONDARY);
+        tools.setOnClickListener(v -> riceUi.installTools());
+        card.addView(tools, topMargin(8));
+        note("Only a fixed list of folders is read or written (never ssh keys, history or browser data). Applying a rice first "
+                + "saves your current settings as \"" + RiceManager.BACKUP_NAME + "\". Make your look with lxappearance, obconf, "
+                + "rofi, feh and the rest inside Kali, then save it here.");
+
+        section("Saved rices");
+        riceList = card;
+        refreshRices();
+    }
+
+    /** Fills the list of saved rices; the files are looked into on a background thread. */
+    private void refreshRices() {
+        if (riceList == null) return;
+        final java.util.List<java.io.File> files = RiceManager.list(this);
+        new Thread(() -> {
+            final java.util.List<RiceManager.Info> infos = new java.util.ArrayList<>();
+            for (java.io.File f : files) infos.add(RiceManager.readInfo(f));
+            main.post(() -> {
+                if (isFinishing() || isDestroyed() || riceList == null) return;
+                riceList.removeAllViews();
+                if (files.isEmpty()) {
+                    TextView none = new TextView(this);
+                    none.setText("Nothing saved yet. Tap Save current setup, or import a file.");
+                    none.setTextColor(Ui.DIM);
+                    none.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+                    none.setPadding(0, Ui.dp(this, 6), 0, Ui.dp(this, 6));
+                    riceList.addView(none);
+                    return;
+                }
+                for (int i = 0; i < files.size(); i++) {
+                    final java.io.File f = files.get(i);
+                    RiceManager.Info info = infos.get(i);
+                    String nm = RiceManager.nameOf(f);
+                    TextView name = new TextView(this);
+                    name.setText(RiceManager.BACKUP_NAME.equals(nm) ? nm + "  (automatic backup)" : nm);
+                    name.setTextColor(Ui.TEXT);
+                    name.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+                    name.setPadding(0, Ui.dp(this, i == 0 ? 2 : 14), 0, 0);
+                    riceList.addView(name);
+                    TextView sub = new TextView(this);
+                    sub.setText(RiceUi.summary(f, info) + "  \u00B7  " + new SimpleDateFormat("d MMM yyyy", Locale.getDefault()).format(new Date(f.lastModified())));
+                    sub.setTextColor(info.problem != null ? Ui.DANGER : Ui.DIM);
+                    sub.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+                    sub.setPadding(0, Ui.dp(this, 2), 0, Ui.dp(this, 6));
+                    riceList.addView(sub);
+                    LinearLayout row = new LinearLayout(this);
+                    row.setOrientation(LinearLayout.HORIZONTAL);
+                    TextView ap = Ui.button(this, "Apply", Ui.PRIMARY);
+                    ap.setOnClickListener(v -> riceUi.apply(f));
+                    TextView ex = Ui.button(this, "Export", Ui.SECONDARY);
+                    ex.setOnClickListener(v -> riceUi.export(f));
+                    TextView del = Ui.button(this, "Delete", Ui.DANGER_STYLE);
+                    del.setOnClickListener(v -> riceUi.delete(f));
+                    if (info.problem != null) { ap.setEnabled(false); ap.setAlpha(0.4f); }
+                    for (TextView b : new TextView[]{ap, ex, del}) {
+                        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+                        lp.rightMargin = Ui.dp(this, 6);
+                        row.addView(b, lp);
+                    }
+                    riceList.addView(row);
+                }
+            });
+        }, "rice-list").start();
     }
 
     private void buildCommandsSection() {
@@ -954,6 +946,8 @@ public class SettingsActivity extends Activity {
         startActivityForResult(i, REQ_EXPORT);
     }
 
+    private boolean fehMissing() { return VncManager.extrasMissing(this).contains("feh"); }
+
     private String wallpaperLabel() {
         String w = Prefs.vncWallpaperPath(this);
         if (w.isEmpty()) return "Choose your own wallpaper…";
@@ -963,6 +957,7 @@ public class SettingsActivity extends Activity {
     @Override protected void onActivityResult(int req, int res, Intent data) {
         super.onActivityResult(req, res, data);
         if (FilePick.handle(req, res, data)) return;
+        if (riceUi != null && riceUi.handle(req, res, data)) return;
         if (res != RESULT_OK || data == null || data.getData() == null) return;
         final Uri uri = data.getData();
         if (req == REQ_IMPORT) {

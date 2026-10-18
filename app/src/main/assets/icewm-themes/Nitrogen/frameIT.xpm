@@ -1,8 +1,0 @@
-/* XPM */
-static char * dframeIT_xpm[] = {
-"1 2 3 1",
-" 	c None",
-".	c #CACACA",
-"+	c #ECECEA",
-".",
-"+"};

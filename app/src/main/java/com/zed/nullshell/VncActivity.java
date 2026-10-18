@@ -22,7 +22,7 @@ import android.widget.Toast;
 
 
 /**
- * Start and stop the Kali VNC server (an IceWM desktop) and see how to connect to it from a VNC viewer app.
+ * Start and stop the Kali VNC server (an IceWM or Openbox desktop) and see how to connect to it from a VNC viewer app.
  * The server itself is run by {@link VncManager}; this screen only shows its state, refreshed once a second, so it
  * can be left and reopened while the server keeps running.
  */
@@ -147,7 +147,7 @@ public class VncActivity extends Activity {
         content.addView(connectCard, cardParams(Ui.dp(this, 12)));
 
         // ---- uninstall
-        uninstallBtn = Ui.key(this, "Uninstall VNC server and IceWM");
+        uninstallBtn = Ui.key(this, "Uninstall VNC server and desktop");
         uninstallBtn.setOnClickListener(v -> confirmUninstall());
         LinearLayout.LayoutParams up = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, Ui.dp(this, 36));
         up.topMargin = Ui.dp(this, 14);
@@ -260,7 +260,7 @@ public class VncActivity extends Activity {
             String miss = VncManager.missing(this);
             statusTitle.setText("Not installed");
             statusDetail.setText((VncManager.anyInstalled(this) ? "Still needed: " + miss + ". " : "")
-                    + "Install adds IceWM and a VNC server inside Kali. It is a real download and uses storage.");
+                    + "Install adds " + VncManager.wmName(this) + " and a VNC server inside Kali. It is a real download and uses storage.");
         } else if (ready) {
             statusTitle.setText("Running");
             statusDetail.setText(Prefs.vncWidth(this) + "×" + Prefs.vncHeight(this) + "  ·  " + Prefs.vncDepth(this)
@@ -279,7 +279,7 @@ public class VncActivity extends Activity {
         } else {
             statusTitle.setText("Stopped");
             statusDetail.setText("Ready. Tap Start, then connect with a VNC viewer app."
-                    + (extras.isEmpty() ? "" : "\n\nFile managers (Thunar, PCManFM) also need: " + extras
+                    + (extras.isEmpty() ? "" : "\n\nFile managers (Thunar, PCManFM) and wallpapers also need: " + extras
                     + ". Tap Install extras to add them."));
         }
         show(statusDetail, statusDetail.getText().length() > 0);
@@ -333,16 +333,16 @@ public class VncActivity extends Activity {
     }
 
     private void confirmInstall() {
-        new Dlg(this).setTitle("Install VNC server and IceWM?")
-                .setMessage("This runs in a terminal tab:\n\n" + VncManager.installCommand()
+        new Dlg(this).setTitle("Install VNC server and " + VncManager.wmName(this) + "?")
+                .setMessage("This runs in a terminal tab:\n\n" + VncManager.installCommand(this)
                         + "\n\nIt is a real download. When it finishes, come back here and tap Start.")
-                .setPositiveButton("Install", (d, w) -> MainActivity.runInTerminal(this, VncManager.installCommand()))
+                .setPositiveButton("Install", (d, w) -> MainActivity.runInTerminal(this, VncManager.installCommand(this)))
                 .setNegativeButton("Cancel", null).show();
     }
 
     private void confirmUninstall() {
-        new Dlg(this).setTitle("Uninstall VNC server and IceWM?")
-                .setMessage("This stops the server if it is running, then removes IceWM and the VNC server from Kali and "
+        new Dlg(this).setTitle("Uninstall VNC server and desktop?")
+                .setMessage("This stops the server if it is running, then removes IceWM, Openbox and the VNC server from Kali and "
                         + "deletes ~/.vnc. It runs in a terminal tab:\n\n" + VncManager.uninstallCommand())
                 .setPositiveButton("Uninstall", (d, w) -> {
                     restartPending = false;

@@ -2,7 +2,7 @@
 
 # NullShell
 
-**Kali Linux, a code editor, a dev-tools browser and an AI assistant — in one APK. No root.**
+**Kali Linux, a code editor, a dev-tools browser and a file manager — in one APK. No root.**
 
 [![Build](https://github.com/ScriptKiddieZed/NullShell/actions/workflows/build.yml/badge.svg)](https://github.com/ScriptKiddieZed/NullShell/actions/workflows/build.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -16,7 +16,7 @@
 
 </div>
 
-NullShell runs a full Kali Linux userspace through [PRoot](https://proot-me.github.io/), directly from the app — terminal, code editor, in-app browser, file manager and an AI assistant, all in one APK, no root required. Kali Linux is a trademark of OffSec; NullShell is not affiliated with or endorsed by it.
+NullShell runs a full Kali Linux userspace through [PRoot](https://proot-me.github.io/), directly from the app — terminal, code editor, in-app browser, file manager and desktop, all in one APK, no root required. Kali Linux is a trademark of OffSec; NullShell is not affiliated with or endorsed by it.
 
 ## Screenshots
 
@@ -29,15 +29,14 @@ NullShell runs a full Kali Linux userspace through [PRoot](https://proot-me.gith
   <tr>
     <td align="center" width="33%"><img src="Docs/4.png" alt="File manager" width="100%"></td>
     <td align="center" width="33%"><img src="Docs/5.png" alt="Custom commands" width="100%"></td>
-    <td align="center" width="33%"><img src="Docs/6.png" alt="AI chat" width="100%"></td>
   </tr>
 </table>
 
 ## Why NullShell?
 
-- **Everything in one app.** Terminal, editor with language servers, a browser with DevTools-style panels, a file manager and an AI chat, instead of juggling several apps.
+- **Everything in one app.** Terminal, editor with language servers, a browser with DevTools-style panels, a file manager and a VNC desktop, instead of juggling several apps.
 - **Made for security work on a phone.** Point the built-in browser at your own mitmproxy, Caido or Burp using an app-private CA certificate, without touching the system trust store.
-- **Real Kali userspace.** `apt install` the tools you already know, and run a full IceWM desktop over VNC.
+- **Real Kali userspace.** `apt install` the tools you already know, and run a full IceWM or Openbox desktop over VNC.
 - **Works out of the box.** The PRoot runtime is bundled, so there is no manual setup step.
 - **Open source (MIT).** Third-party components keep their own licenses, listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
@@ -81,12 +80,6 @@ Requirements: an ARM64 device running Android 8.0 (API 26) or newer.
 
 - A native file manager (browse, move, copy, rename, delete, open-with) covering both the app's own storage and the Kali rootfs.
 
-### AI chat
-
-- An in-app assistant powered by the Gemini API: multiple assistants with their own system prompts, streamed responses, model picker, file attachments, and saved conversations.
-- Per-message actions (copy, copy as plain text, regenerate, delete) and long-press text selection.
-- Paste a shell code block straight from a chat into the terminal, or export a conversation as Markdown.
-
 ### Appearance
 
 - 16 built-in themes covering the terminal, editor and UI, each with its own matching launcher icon (with an optional "match theme" switch), adjustable accent colour and corner roundness, and automatic day/night switching.
@@ -95,10 +88,12 @@ Requirements: an ARM64 device running Android 8.0 (API 26) or newer.
 - A Network screen to view and copy your device's IP and Wi-Fi gateway, and discover other devices on the same Wi-Fi network or your phone's hotspot.
 
 ### VNC server
-- Start and stop a VNC server in Kali that shows an IceWM desktop, and connect to it from a separate VNC viewer app (for example bVNC or RealVNC Viewer). One-tap install and uninstall, a foreground notification with a Stop button, and an in-app log when something fails.
+- Start and stop a VNC server in Kali that shows an IceWM or Openbox desktop (choose in Settings), and connect to it from a separate VNC viewer app (for example bVNC or RealVNC Viewer). One-tap install and uninstall, a foreground notification with a Stop button, and an in-app log when something fails.
+- Openbox comes with a tint2 panel along the bottom (window buttons, tray, clock and a Menu button that opens the app menu, so no right-click is needed). The panel takes its colours from the window theme when its config is first written.
 - GTK file managers such as Thunar and PCManFM work inside the desktop: a small `bwrap` stand-in lets the image loaders run under PRoot, where bubblewrap sandboxes are not available.
 - Settings for resolution (with presets, including your phone's own screen size), colour depth, scale (DPI), display number, password, localhost-only or network access, shared sessions, clipboard sharing, an auto-opened terminal, and extra server arguments. Software rendered, so there is no GPU acceleration.
-- Real IceWM themes: Nord, Nitrogen and Ice7 come with the app, and the official [icewm-extra](https://github.com/ice-wm/icewm-extra) collection (about 100 more, GPL-3.0) can be downloaded from Settings. Pick a theme, an interface size for phone screens, and how its wallpaper fits (stretch, centre, tile or none), or choose your own PNG/JPEG image as the wallpaper. The desktop also gets no CPU/network graphs, a solid background (unless the theme has its own wallpaper) and a start menu listing the Kali GUI tools you have installed. A "keep my own desktop config" switch and a reset button are included.
+- NullShell never overwrites your desktop config in Kali: the IceWM and Openbox/tint2 files are written only when they are missing (a starting point for a phone screen), and are yours after that. Set themes, icons and fonts up inside Kali with lxappearance, obconf, rofi and friends. Your own PNG/JPEG wallpaper (and how it fits) is set with feh at every desktop start without touching any file.
+- **Rices.** Save your whole desktop look under a name (Settings > Rices): window manager and panel settings (Openbox, tint2, IceWM, rofi, picom, polybar, dunst, conky ...), GTK/Qt settings written by lxappearance, `~/.themes`, `~/.icons`, fonts and the wallpapers your configs use. Export it as one `.nsrice` file, import one from someone else, and apply any saved rice later. Only a fixed list of folders is ever read or written (never ssh keys, history or browser data), files that look like they hold keys are flagged before saving, applying a rice first backs up your current settings, and imports are checked entry by entry.
 
 ## Building from source
 

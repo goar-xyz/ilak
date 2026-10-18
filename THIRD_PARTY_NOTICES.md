@@ -42,19 +42,7 @@ version, replace the file in `app/src/main/jniLibs/arm64-v8a/` and rebuild with 
 License texts are in [`licenses/`](licenses/): `GPL-2.0.txt` (PRoot), `LGPL-3.0.txt` and `GPL-3.0.txt` (talloc),
 and `BSD-3-Clause-libandroid-shmem.txt` (libandroid-shmem).
 
-## IceWM themes (downloaded on request)
+## Themes
 
-The optional theme download in Settings > VNC server fetches the community themes of
-[ice-wm/icewm-extra](https://github.com/ice-wm/icewm-extra) (GPL-3.0; each theme has its own authors) at the user's request.
-They are not bundled in the APK.
-
-## Bundled IceWM themes
-
-`app/src/main/assets/icewm-themes/` contains three IceWM themes, each licensed under the GNU GPL (the license text is in each
-theme's `COPYING` file) and copied into the user's Kali home folder at runtime as plain data files:
-
-- **Nord** (originally "Icewm_Nord_style") by IamJony - GPL
-- **Nitrogen** by jcsl and Marcus Moeller - GPL
-- **Ice7** by Lioh Moeller, based on work by bluedxca93 and I-Jurij - GPL
-
-They are separate works and are not linked into the app's code.
+NullShell does not bundle or download any desktop themes. Themes, icons and fonts inside a rice file belong to the people who
+made them and keep their own licences; a rice you import is data you chose to install.
