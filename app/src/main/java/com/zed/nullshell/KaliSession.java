@@ -23,7 +23,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * One terminal tab: an emulator plus (optionally) a PRoot process. id 0 is the "Console" tab,
  * which only shows logs and never starts a process.
  *
- * PTY strategy: Java cannot call forkpty(), so inside the guest we run
+ * PTY strategy, preferred: the native library libnsterm.so ({@link NativePty}) forks PRoot on a real pseudo-terminal and
+ * resizes it with an ioctl. Fallback when the library is missing: Java cannot call forkpty(), so inside the guest we run
  * {@code script -qefc ns-shell /dev/null}. script(1) allocates a real pseudo-terminal, which
  * gives proper job control, Ctrl+C, colours and full-screen programs. Window-size changes are
  * delivered through a per-session FIFO that a tiny guest-side watcher turns into
@@ -43,6 +44,10 @@ public final class KaliSession {
 
     private volatile Listener listener;
     private volatile Process proc;
+    // Native terminal mode (see NativePty): the master side of the pseudo-terminal and the PRoot process id.
+    private final Object ptyLock = new Object();
+    private volatile int ptyFd = -1;
+    private volatile int ptyPid = 0;
     private volatile OutputStream procIn;
     private volatile RandomAccessFile fifo;
     private volatile File fifoFile;
@@ -65,7 +70,7 @@ public final class KaliSession {
     public TermEmulator emulator() { return emu; }
     public void trimScrollback(int keep) { emu.trimScrollback(keep); }
     public boolean isConsole() { return id == 0; }
-    public boolean isAlive() { Process p = proc; return p != null && p.isAlive(); }
+    public boolean isAlive() { if (ptyPid > 0) return true; Process p = proc; return p != null && p.isAlive(); }
     public boolean isEnded() { return started && !isAlive(); }
     private volatile String customName = "";
 
@@ -107,6 +112,13 @@ public final class KaliSession {
     // ------------------------------------------------------------------ input / resize
 
     public void write(byte[] data) {
+        final int fd = ptyFd;
+        if (fd >= 0) {
+            writer.execute(() -> {
+                synchronized (ptyLock) { if (ptyFd == fd) NativePty.write(fd, data, 0, data.length); }
+            });
+            return;
+        }
         final OutputStream out = procIn;
         if (out == null) return;
         writer.execute(() -> {
@@ -116,6 +128,12 @@ public final class KaliSession {
 
     public void resize(int cols, int rows) {
         emu.resize(cols, rows);
+        final int fd = ptyFd;
+        if (fd >= 0) {
+            NativePty.setSize(fd, rows, cols);     // the kernel raises SIGWINCH for the foreground programs
+            scheduleRedraw();
+            return;
+        }
         final RandomAccessFile f = fifo;
         if (f != null) {
             final byte[] msg = (rows + " " + cols + "\n").getBytes(StandardCharsets.US_ASCII);
@@ -147,47 +165,55 @@ public final class KaliSession {
                 fakeBinds = prepareFakeProc(ctx);
             }
 
-            String fifoName = ".ns-winsize-" + id;
-            fifoFile = new File(rootfs, "tmp/" + fifoName);
-            Files.deleteIfExists(fifoFile.toPath());
-            Os.mkfifo(fifoFile.getAbsolutePath(), 0600);
-
             emu.resize(cols, rows);
 
             String cmdFifoName = ".ns-cmd-" + id;
             cmdFifoFile = new File(rootfs, "tmp/" + cmdFifoName);
             Files.deleteIfExists(cmdFifoFile.toPath());
             Os.mkfifo(cmdFifoFile.getAbsolutePath(), 0600);
+            // O_RDWR on a FIFO never blocks and keeps the pipe alive for the whole session.
+            cmdFifo = new RandomAccessFile(cmdFifoFile, "rw");
+            startCommandReader(cmdFifo);
 
             String shell = Prefs.shell(ctx);
             // Fake /proc copies must come after the /proc bind (ProotLauncher adds them there).
             List<String> command = ProotLauncher.command(ctx, rootfs, fakeBinds, Prefs.workdir(ctx));
-            List<String> env = new ArrayList<>();
-            env.add("SHELL=" + shell);
-            env.add("TERM=xterm-256color");
-            env.add("COLORTERM=truecolor");
-            env.add("NS_ROWS=" + rows);
-            env.add("NS_COLS=" + cols);
-            env.add("NS_FIFO=/tmp/" + fifoName);
-            env.add("NS_CMD_FIFO=/tmp/" + cmdFifoName);
-            env.add("NS_SESSION=" + id);
-            env.add("NS_SHELL=" + shell);
-            env.add("NS_INIT=" + Prefs.startupCmd(ctx));
-            env.add("NMAP_UNPRIVILEGED=1");      // apps get no raw sockets or netlink routes: nmap must use plain TCP connects
-            if (Prefs.editorEnv(ctx)) { env.add("EDITOR=ns-edit -w"); env.add("VISUAL=ns-edit -w"); }
-            List<String> argv = new ArrayList<>();
-            argv.add("/usr/local/bin/ns-session");
-            command.addAll(ProotLauncher.guestCommand(ctx, argv, env));
 
-            ProcessBuilder pb = new ProcessBuilder(command);
+            // Preferred: a real pseudo-terminal from the native library. Without it (or if it fails) the guest runs
+            // script(1) to get one, and window-size changes travel through a FIFO.
+            if (NativePty.AVAILABLE) {
+                try {
+                    ProcessBuilder pb = new ProcessBuilder(buildCommand(ctx, new ArrayList<>(command), shell, true, rows, cols, null, cmdFifoName));
+                    ProotLauncher.applyEnvironment(pb, ctx);
+                    List<String> envList = new ArrayList<>();
+                    for (java.util.Map.Entry<String, String> e : pb.environment().entrySet()) envList.add(e.getKey() + "=" + e.getValue());
+                    List<String> argvList = pb.command();
+                    int[] r = NativePty.spawn(argvList.get(0), argvList.toArray(new String[0]), envList.toArray(new String[0]),
+                            pb.directory().getAbsolutePath(), rows, cols);
+                    final int fd = r[0], pid = r[1];
+                    synchronized (ptyLock) { ptyFd = fd; ptyPid = pid; }
+                    log("[+] Starting Kali through PRoot…\n");
+                    Thread reader = new Thread(() -> pumpNative(fd, pid), "kali-output-" + id);
+                    reader.setDaemon(true);
+                    reader.start();
+                    Thread waiter = new Thread(() -> awaitNative(pid), "kali-waiter-" + id);
+                    waiter.setDaemon(true);
+                    waiter.start();
+                    return null;
+                } catch (RuntimeException e) {
+                    log("[!] Native terminal unavailable (" + describe(e) + "); using the compatible mode.\n");
+                }
+            }
+
+            String fifoName = ".ns-winsize-" + id;
+            fifoFile = new File(rootfs, "tmp/" + fifoName);
+            Files.deleteIfExists(fifoFile.toPath());
+            Os.mkfifo(fifoFile.getAbsolutePath(), 0600);
+            fifo = new RandomAccessFile(fifoFile, "rw");   // buffers resize messages even before the guest watcher opens it
+
+            ProcessBuilder pb = new ProcessBuilder(buildCommand(ctx, command, shell, false, rows, cols, fifoName, cmdFifoName));
             ProotLauncher.applyEnvironment(pb, ctx);
             pb.redirectErrorStream(true);
-
-            // O_RDWR on a FIFO never blocks and keeps the pipe alive for the whole session,
-            // so resize messages are buffered even before the guest watcher opens it.
-            fifo = new RandomAccessFile(fifoFile, "rw");
-            cmdFifo = new RandomAccessFile(cmdFifoFile, "rw");
-            startCommandReader(cmdFifo);
 
             final Process p = pb.start();
             proc = p;
@@ -206,11 +232,20 @@ public final class KaliSession {
             releaseFeeder();
             proc = null;
             procIn = null;
+            synchronized (ptyLock) { if (ptyFd >= 0) NativePty.close(ptyFd); ptyFd = -1; ptyPid = 0; }
             return "Start failed: " + describe(e);
         }
     }
 
     public void stop() {
+        final int pid = ptyPid;
+        if (pid > 0) {
+            synchronized (ptyLock) { ptyPid = 0; }
+            NativePty.kill(pid, 9);   // the whole session; --kill-on-exit makes PRoot take the guest processes with it
+            cleanupFifo();
+            log("\n[+] Session stopped.\n");
+            return;
+        }
         Process p = proc;
         if (p == null) return;
         proc = null;
@@ -218,6 +253,61 @@ public final class KaliSession {
         p.destroyForcibly();   // --kill-on-exit makes PRoot take the guest processes with it
         cleanupFifo();
         log("\n[+] Session stopped.\n");
+    }
+
+    /** PRoot command line plus the guest session. Native mode needs no window-size FIFO and no script(1). */
+    private List<String> buildCommand(Context ctx, List<String> command, String shell, boolean nat, int rows, int cols,
+                                      String fifoName, String cmdFifoName) {
+        List<String> env = new ArrayList<>();
+        env.add("SHELL=" + shell);
+        env.add("TERM=xterm-256color");
+        env.add("COLORTERM=truecolor");
+        if (nat) {
+            env.add("NS_NATIVE_PTY=1");
+        } else {
+            env.add("NS_ROWS=" + rows);
+            env.add("NS_COLS=" + cols);
+            env.add("NS_FIFO=/tmp/" + fifoName);
+        }
+        env.add("NS_CMD_FIFO=/tmp/" + cmdFifoName);
+        env.add("NS_SESSION=" + id);
+        env.add("NS_SHELL=" + shell);
+        env.add("NS_INIT=" + Prefs.startupCmd(ctx));
+        env.add("NMAP_UNPRIVILEGED=1");      // apps get no raw sockets or netlink routes: nmap must use plain TCP connects
+        if (Prefs.editorEnv(ctx)) { env.add("EDITOR=ns-edit -w"); env.add("VISUAL=ns-edit -w"); }
+        List<String> argv = new ArrayList<>();
+        argv.add("/usr/local/bin/ns-session");
+        command.addAll(ProotLauncher.guestCommand(ctx, argv, env));
+        return command;
+    }
+
+    private void pumpNative(int fd, int pid) {
+        byte[] buf = new byte[16 * 1024];
+        int n;
+        while ((n = NativePty.read(fd, buf, 0, buf.length)) > 0) {
+            emu.process(buf, 0, n);
+            scheduleRedraw();
+        }
+        synchronized (ptyLock) {              // the terminal is finished: no write may reach a reused descriptor
+            if (ptyFd == fd) ptyFd = -1;
+            NativePty.close(fd);
+        }
+    }
+
+    private void awaitNative(int pid) {
+        int code = NativePty.waitFor(pid);
+        releaseFeeder();
+        boolean ownExit;
+        synchronized (ptyLock) { ownExit = ptyPid == pid; if (ownExit) ptyPid = 0; }
+        if (ownExit) {                        // exited on its own (not through stop())
+            cleanupFifo();
+            log("\n[i] Session ended (exit " + code + ").\n");
+        }
+        final int exit = code;
+        main.post(() -> {
+            Listener l = listener;
+            if (l != null) l.onExit(this, exit);
+        });
     }
 
     private void pump(Process p) {
@@ -333,8 +423,14 @@ public final class KaliSession {
         writeIfChanged(new File(bin, "ns-dpkg"), NS_DPKG, true);
         File aptConf = new File(rootfs, "etc/apt/apt.conf.d");
         aptConf.mkdirs();
+        // dpkg forces a disk sync after almost every file, which is very slow under PRoot; a power loss during an
+        // install is the only thing this makes riskier.
+        File dpkgCfg = new File(rootfs, "etc/dpkg/dpkg.cfg.d");
+        dpkgCfg.mkdirs();
+        writeIfChanged(new File(dpkgCfg, "ns-unsafe-io"), "# Generated by NullShell\nforce-unsafe-io\n", false);
         writeIfChanged(new File(aptConf, "99nullshell"),
                 "// Generated by NullShell\n" +
+                "Acquire::Languages \"none\";\n" +
                 "Dir::Bin::dpkg \"/usr/local/bin/ns-dpkg\";\n" +
                 "APT::Sandbox::User \"root\";\n", false);
 
@@ -375,6 +471,8 @@ public final class KaliSession {
             "#!/bin/bash\n" +
             "# Generated by NullShell - runs inside PRoot.\n" +
             "/usr/local/bin/ns-dpkg --ns-stub-only 2>/dev/null\n" +
+            "# the app already gave this session a real terminal (libnsterm); otherwise script(1) makes one\n" +
+            "if [ -n \"$NS_NATIVE_PTY\" ]; then exec /usr/local/bin/ns-shell; fi\n" +
             "if command -v script >/dev/null 2>&1; then\n" +
             "  start=$SECONDS\n" +
             "  script -qefc /usr/local/bin/ns-shell /dev/null\n" +
@@ -397,7 +495,7 @@ public final class KaliSession {
             "if [ -n \"$NS_INIT\" ]; then ( eval \"$NS_INIT\" ); fi\n" +
             "SH=\"${NS_SHELL:-/bin/bash}\"\n" +
             "[ -x \"$SH\" ] || { echo \"[!] $SH not found, using /bin/bash\" >&2; SH=/bin/bash; }\n" +
-            "unset NS_ROWS NS_COLS NS_FIFO NS_INIT NS_SHELL\n" +
+            "unset NS_ROWS NS_COLS NS_FIFO NS_INIT NS_SHELL NS_NATIVE_PTY\n" +
             "exec \"$SH\" -l\n";
 
     private static final String NS_WINWATCH =

@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.18)
+project(nsterm C)
+# 16 KB page alignment for devices with 16 KB pages (Android 15+)
+add_library(nsterm SHARED nsterm.c)
+target_compile_options(nsterm PRIVATE -Wall -Wextra -O2)
+target_link_options(nsterm PRIVATE -Wl,-z,max-page-size=16384)

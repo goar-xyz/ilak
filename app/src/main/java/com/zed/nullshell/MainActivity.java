@@ -177,8 +177,8 @@ public class MainActivity extends Activity {
         buildSessionsDrawer();
 
         term.setModifierListener((ctrl, alt) -> main.post(() -> {
-            Ui.setKeyActive(this, ctrlKey, ctrl);
-            Ui.setKeyActive(this, altKey, alt);
+            if (ctrlKey != null) Ui.setKeyActive(this, ctrlKey, ctrl);
+            if (altKey != null) Ui.setKeyActive(this, altKey, alt);
         }));
         manager.setCallback(new SessionManager.Callback() {
             @Override public void onTabsChanged() { refreshUi(); }
@@ -557,26 +557,25 @@ public class MainActivity extends Activity {
     private void buildExtraKeys() {
         LinearLayout row = keysRow;
         row.removeAllViews();
-        ctrlKey = addKey(row, "CTRL", v -> term.toggleCtrl());
-        altKey = addKey(row, "ALT", v -> term.toggleAlt());
-        Ui.setKeyActive(this, ctrlKey, term.isCtrlSticky());
-        Ui.setKeyActive(this, altKey, term.isAltSticky());
-        addKey(row, "ESC", v -> term.handleKey(KeyEvent.KEYCODE_ESCAPE, null));
-        addKey(row, "TAB", v -> term.handleKey(KeyEvent.KEYCODE_TAB, null));
-        addKey(row, "\u2190", v -> term.handleKey(KeyEvent.KEYCODE_DPAD_LEFT, null));
-        addKey(row, "\u2193", v -> term.handleKey(KeyEvent.KEYCODE_DPAD_DOWN, null));
-        addKey(row, "\u2191", v -> term.handleKey(KeyEvent.KEYCODE_DPAD_UP, null));
-        addKey(row, "\u2192", v -> term.handleKey(KeyEvent.KEYCODE_DPAD_RIGHT, null));
-        addKey(row, "HOME", v -> term.handleKey(KeyEvent.KEYCODE_MOVE_HOME, null));
-        addKey(row, "END", v -> term.handleKey(KeyEvent.KEYCODE_MOVE_END, null));
-        addKey(row, "PGUP", v -> term.handleKey(KeyEvent.KEYCODE_PAGE_UP, null));
-        addKey(row, "PGDN", v -> term.handleKey(KeyEvent.KEYCODE_PAGE_DOWN, null));
-        addKey(row, "-", v -> term.typeText("-"));
-        addKey(row, "/", v -> term.typeText("/"));
-        addKey(row, "|", v -> term.typeText("|"));
-        addKey(row, "~", v -> term.typeText("~"));
-        addKey(row, "PASTE", v -> term.paste());
-        addKey(row, "KB", v -> term.toggleKeyboard());
+        ctrlKey = null;
+        altKey = null;
+        for (ExtraKeys.Def d : ExtraKeys.layout(Prefs.extraKeysLayout(this))) {
+            switch (d.kind) {
+                case ExtraKeys.MOD_CTRL:
+                    ctrlKey = addKey(row, d.label, v -> term.toggleCtrl());
+                    Ui.setKeyActive(this, ctrlKey, term.isCtrlSticky());
+                    break;
+                case ExtraKeys.MOD_ALT:
+                    altKey = addKey(row, d.label, v -> term.toggleAlt());
+                    Ui.setKeyActive(this, altKey, term.isAltSticky());
+                    break;
+                case ExtraKeys.KEYCODE: addKey(row, d.label, v -> term.handleKey(d.code, null)); break;
+                case ExtraKeys.TEXT: addKey(row, d.label, v -> term.typeText(d.text)); break;
+                case ExtraKeys.PASTE: addKey(row, d.label, v -> term.paste()); break;
+                case ExtraKeys.KEYBOARD: addKey(row, d.label, v -> term.toggleKeyboard()); break;
+                default: break;
+            }
+        }
 
         List<Snippet> pinned = SnippetStore.get().pinned();
         if (!pinned.isEmpty()) {

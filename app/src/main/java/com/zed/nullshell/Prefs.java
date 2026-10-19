@@ -41,6 +41,7 @@ public final class Prefs {
     /** Colour depths the VNC server can be started with; VNC_DEPTH is an index into this. */
     public static final int[] VNC_DEPTHS = {16, 24};
     public static final String EXTRA_KEYS = "extra_keys";
+    public static final String EXTRA_KEYS_LAYOUT = "extra_keys_layout";
     public static final String AUTO_START = "auto_start";
     public static final String EDITOR_ENV = "editor_env";
     public static final String ED_FONT = "ed_font";
@@ -86,6 +87,8 @@ public final class Prefs {
     public static int scheme(Context c) { return clamp(sp(c).getInt(SCHEME, 0), 0, SCHEME_NAMES.length - 1); }
     public static int schemeFg(Context c) { return scheme(c) == 0 ? Theme.current.termFg : SCHEME_COLORS[scheme(c)][0]; }
     public static int schemeBg(Context c) { return scheme(c) == 0 ? Theme.current.termBg : SCHEME_COLORS[scheme(c)][1]; }
+    /** Saved key ids of the extra-keys row, empty for the default row (see {@link ExtraKeys}). */
+    public static String extraKeysLayout(Context c) { return sp(c).getString(EXTRA_KEYS_LAYOUT, ""); }
     public static boolean extraKeys(Context c) { return sp(c).getBoolean(EXTRA_KEYS, true); }
     public static boolean autoStart(Context c) { return sp(c).getBoolean(AUTO_START, true); }
     public static boolean editorEnv(Context c) { return sp(c).getBoolean(EDITOR_ENV, false); }

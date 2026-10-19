@@ -314,6 +314,9 @@ public class SettingsActivity extends Activity {
                 + "A new length applies to tabs opened afterwards.");
 
         toggle("Show extra keys row", Prefs.EXTRA_KEYS, true);
+        TextView customKeys = Ui.button(this, "Customize extra keys\u2026", Ui.SECONDARY);
+        customKeys.setOnClickListener(v -> ExtraKeysUi.show(this, null));
+        card.addView(customKeys);
         toggle("Keep screen on", Prefs.KEEP_SCREEN_ON, false);
     }
 

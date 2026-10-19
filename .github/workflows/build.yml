@@ -31,6 +31,12 @@ jobs:
       - name: Grant execute permission to gradlew
         run: chmod +x gradlew
 
+      - name: Check the native libraries are in the repository
+        run: |
+          for f in libproot.so libproot-loader.so libtalloc.so libandroid-shmem.so libnsterm.so; do
+            [ -f "app/src/main/jniLibs/arm64-v8a/$f" ] || echo "::warning::$f is missing from app/src/main/jniLibs/arm64-v8a"
+          done
+
       - name: Assemble debug APK
         # The prebuilt PRoot runtime is committed in app/src/main/jniLibs, so this APK can start Kali sessions.
         run: ./gradlew assembleDebug --stacktrace
